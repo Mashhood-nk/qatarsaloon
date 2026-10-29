@@ -1,0 +1,193 @@
+// Shapes the API returns. Shared by the Worker and the React app.
+
+export type BookingStatus = "pending" | "confirmed" | "declined" | "cancelled" | "in_progress" | "done" | "no_show";
+export type BookingSource = "online" | "walkin" | "admin";
+
+/** Statuses that hold time in the schedule. */
+export const BLOCKING_STATUSES: BookingStatus[] = ["pending", "confirmed", "in_progress"];
+
+export interface ServiceDto {
+  id: number;
+  name: string;
+  duration_min: number;
+  price: number;
+  active: boolean;
+  sort: number;
+}
+
+export interface DayHoursDto {
+  weekday: number;
+  open_min: number;
+  close_min: number;
+  closed: boolean;
+}
+
+export interface BreakDto {
+  id: number;
+  weekday: number | null;
+  start_min: number;
+  end_min: number;
+  label: string;
+}
+
+export interface TimeOffDto {
+  id: number;
+  date: string;
+  start_min: number;
+  end_min: number;
+  reason: string;
+}
+
+export interface GalleryDto {
+  id: number;
+  url: string;
+  caption: string;
+}
+
+export interface ShopSettings {
+  slot_step_min: number;
+  buffer_min: number;
+  grace_min: number;
+  reminder_min: number;
+  reopen_min: number;
+  change_cutoff_min: number;
+  min_notice_min: number;
+  booking_days_ahead: number;
+}
+
+export interface PublicShopDto {
+  slug: string;
+  name: string;
+  tagline: string;
+  about: string;
+  area: string;
+  address: string;
+  map_url: string;
+  phone: string;
+  whatsapp: string;
+  accent: string;
+  logo_url: string | null;
+  cover_url: string | null;
+  currency: string;
+  timezone: string;
+  today: string;
+  booking_days_ahead: number;
+  services: ServiceDto[];
+  hours: DayHoursDto[];
+  breaks: BreakDto[];
+  gallery: GalleryDto[];
+}
+
+export interface SlotsDto {
+  date: string;
+  closed: boolean;
+  duration_min: number;
+  slots: { start: number; available: boolean }[];
+  breaks: { start_min: number; end_min: number; label: string }[];
+  hours: { open_min: number; close_min: number } | null;
+}
+
+export interface BookingServiceDto {
+  service_id: number;
+  name: string;
+  duration_min: number;
+  price: number;
+}
+
+export interface PublicBookingDto {
+  token: string;
+  status: BookingStatus;
+  date: string;
+  start_min: number;
+  duration_min: number;
+  price_total: number;
+  services: BookingServiceDto[];
+  customer_name: string;
+  whatsapp: string | null;
+  can_change: boolean;
+  change_cutoff_min: number;
+  shop: {
+    slug: string;
+    name: string;
+    address: string;
+    map_url: string;
+    phone: string;
+    whatsapp: string;
+    accent: string;
+    currency: string;
+    timezone: string;
+    logo_url: string | null;
+  };
+}
+
+export interface CustomerDto {
+  id: number;
+  phone: string | null;
+  name: string;
+  whatsapp: string | null;
+  prefs: string[];
+  notes: string;
+  is_guest: boolean;
+  created_at: string;
+}
+
+export interface AdminBookingDto {
+  id: number;
+  token: string;
+  status: BookingStatus;
+  source: BookingSource;
+  date: string;
+  start_min: number;
+  duration_min: number;
+  price_total: number;
+  services: BookingServiceDto[];
+  started_at: string | null;
+  finished_at: string | null;
+  reminder_sent_at: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+  customer: (CustomerDto & { visits: number; no_shows: number }) | null;
+}
+
+export interface TodayDto {
+  date: string;
+  now_min: number;
+  now_date: string;
+  settings: ShopSettings;
+  hours: { open_min: number; close_min: number } | null;
+  breaks: { start_min: number; end_min: number; label: string }[];
+  time_off: TimeOffDto[];
+  bookings: AdminBookingDto[];
+  requests: AdminBookingDto[];
+}
+
+export interface MeDto {
+  user: { id: number; username: string; name: string; role: string };
+  shop: {
+    id: number;
+    slug: string;
+    name: string;
+    accent: string;
+    currency: string;
+    timezone: string;
+    whatsapp: string;
+    address: string;
+    grace_min: number;
+  } | null;
+}
+
+export interface AdminShopDto extends ShopSettings {
+  slug: string;
+  name: string;
+  tagline: string;
+  about: string;
+  area: string;
+  address: string;
+  map_url: string;
+  phone: string;
+  whatsapp: string;
+  accent: string;
+  logo_url: string | null;
+  cover_url: string | null;
+  gallery: GalleryDto[];
+}

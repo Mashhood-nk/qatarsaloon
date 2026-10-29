@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* Design tokens from the mockups: warm Aesop-like palette, serif display + clean sans body. */
+@theme {
+  --color-ground: #f3eee5;
+  --color-surface: #fbf8f2;
+  --color-sand: #eae3d7;
+  --color-photo: #d9cfc0;
+  --color-line: #ddd4c6;
+  --color-field: #cfc5b5;
+  --color-ink: #24211c;
+  --color-ink-soft: #4a4238;
+  --color-muted: #645b50;
+  --color-faint: #a39886;
+  --color-olive: #3f4a2e;
+  --color-cream: #f7f3ea;
+  --color-amber-bg: #f6e7c8;
+  --color-amber-line: #e7c98f;
+  --color-amber-ink: #6e470d;
+  --color-ok-bg: #e2ecdd;
+  --color-ok-ink: #2f5d3a;
+  --color-bad-bg: #f3deda;
+  --color-bad-ink: #8c2f24;
+  --color-wa-bubble: #dcebd3;
+
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  html {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent, var(--color-olive));
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* The shop's accent colour comes in as --accent on a wrapper element. */
+  .btn-primary {
+    @apply inline-flex h-[54px] items-center justify-center gap-2 rounded-full px-7 text-base font-medium text-cream transition-opacity disabled:opacity-50;
+    background: var(--accent, var(--color-olive));
+  }
+  .btn-outline {
+    @apply inline-flex h-[50px] items-center justify-center gap-2 rounded-full border border-ink bg-transparent px-5 text-[15px] transition-colors hover:bg-sand disabled:opacity-50;
+  }
+  .btn-quiet {
+    @apply inline-flex h-11 items-center justify-center gap-2 rounded-full border border-field bg-transparent px-4 text-sm transition-colors hover:bg-sand disabled:opacity-50;
+  }
+  .field {
+    @apply h-[54px] w-full min-w-0 rounded-xl border border-field bg-surface px-3.5 text-base outline-none focus:border-ink;
+  }
+  .label {
+    @apply text-[13px] font-medium;
+  }
+  .eyebrow {
+    @apply text-xs font-medium tracking-[0.12em] text-muted uppercase;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .display {
+    font-family: var(--font-display);
+    @apply font-medium;
+  }
+}

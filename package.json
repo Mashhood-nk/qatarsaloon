@@ -1,0 +1,39 @@
+{
+  "name": "barber-booking",
+  "version": "1.0.0",
+  "description": "Multi-shop barber booking platform on Cloudflare Workers + D1",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "test": "vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply barber-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply barber-db --remote",
+    "db:seed:local": "wrangler d1 execute barber-db --local --file=seed/seed.sql",
+    "db:seed:remote": "wrangler d1 execute barber-db --remote --file=seed/seed.sql",
+    "hash-password": "node scripts/hash-password.mjs",
+    "deploy": "vite build && wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.14",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^8.5.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.66.0",
+    "@cloudflare/workers-types": "^5.20261029.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.155.0"
+  },
+  "private": true,
+  "type": "module"
+}
