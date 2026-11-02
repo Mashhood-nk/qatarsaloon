@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { api, errorMessage } from "../../lib/api";
 import { useData } from "../../lib/useData";
 import { useDocumentTitle } from "../../lib/useDocumentTitle";
@@ -20,8 +20,43 @@ const toValue = (e164: string): PhoneValue => {
 };
 
 export function ShopSettings() {
+  const { isOwner } = useAdmin();
+  return isOwner ? <OwnerShop /> : <Account />;
+}
+
+async function logoutAndLeave(navigate: (to: string, o?: { replace?: boolean }) => void) {
+  await api.post("/auth/logout").catch(() => {});
+  navigate("/admin/login", { replace: true });
+}
+
+/** What a barber sees: their login only. */
+function Account() {
+  useDocumentTitle("Account");
+  const { me, shop } = useAdmin();
+  const navigate = useNavigate();
+  const [toast, setToast] = useState<string | null>(null);
+  return (
+    <>
+      <header className="flex flex-col gap-1 px-5 pt-6 pb-2">
+        <h1 className="display text-[36px]">Account</h1>
+        <span className="text-sm text-muted">
+          {me.user.name} · {shop.name}
+        </span>
+      </header>
+      <Password onDone={() => setToast("Password changed")} />
+      <section className="px-5 pt-6 pb-8">
+        <button type="button" className="btn-outline w-full" onClick={() => logoutAndLeave(navigate)}>
+          <Icon name="logout" size={18} /> Log out ({me.user.username})
+        </button>
+      </section>
+      <Toast message={toast} onDone={() => setToast(null)} />
+    </>
+  );
+}
+
+function OwnerShop() {
   useDocumentTitle("Shop");
-  const { refreshMe, me } = useAdmin();
+  const { refreshMe, me, barbers } = useAdmin();
   const navigate = useNavigate();
   const { data, error, reload, setData } = useData(() => api.get<AdminShopDto>("/admin/shop"), []);
   const [toast, setToast] = useState<string | null>(null);
@@ -31,10 +66,7 @@ export function ShopSettings() {
 
   const bookingUrl = `${window.location.origin}/${data.slug}`;
 
-  const logout = async () => {
-    await api.post("/auth/logout").catch(() => {});
-    navigate("/admin/login", { replace: true });
-  };
+  const logout = () => logoutAndLeave(navigate);
 
   return (
     <>
@@ -76,9 +108,24 @@ export function ShopSettings() {
         </div>
       </section>
 
+      <section className="px-5 pt-5">
+        <Link to="/admin/team" className="card flex items-center gap-3.5 p-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-sand">
+            <Icon name="user" />
+          </span>
+          <span className="flex flex-1 flex-col gap-0.5">
+            <span className="text-[15px] font-medium">Team</span>
+            <span className="text-[13px] text-muted">
+              {barbers.length} barber{barbers.length === 1 ? "" : "s"} · add barbers and their logins
+            </span>
+          </span>
+          <Icon name="chevronRight" className="text-muted" />
+        </Link>
+      </section>
+
       <Photos shop={data} onChange={(s) => { setData(s); setToast("Photo saved"); }} onError={setToast} />
       <Details shop={data} onSaved={(s) => { setData(s); refreshMe(); setToast("Saved"); }} />
-      <Password onDone={() => setToast("Password changed")} />
+      {!me.acting && <Password onDone={() => setToast("Password changed")} />}
 
       <section className="px-5 pt-6 pb-8">
         <button type="button" className="btn-outline w-full" onClick={logout}>

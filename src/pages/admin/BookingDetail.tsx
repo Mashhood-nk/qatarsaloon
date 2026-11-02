@@ -33,7 +33,7 @@ function OptionButton({ icon, title, hint, onClick, danger, disabled }: { icon: 
 export function BookingDetail() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const { shop, shopInfo, me } = useAdmin();
+  const { shop, shopInfo, me, barbers } = useAdmin();
   const { data: b, error, reload, setData } = useData(() => api.get<AdminBookingDto>(`/admin/bookings/${id}`), [id]);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -92,6 +92,7 @@ export function BookingDetail() {
           {fmtDateLong(b.date)} · {fmtMin(b.start_min)} – {fmtMin(b.start_min + b.duration_min)}
         </Row>
         <Row label="Services">{serviceNames(b.services)}</Row>
+        {barbers.length > 1 && <Row label="Barber">{b.barber_name}</Row>}
         <Row label="Total">{money(b.price_total, me.shop?.currency ?? "QAR")}</Row>
         {b.customer?.phone && <Row label="Mobile">{fmtPhone(b.customer.phone)}</Row>}
         {b.customer?.whatsapp && <Row label="WhatsApp">{fmtPhone(b.customer.whatsapp)}</Row>}

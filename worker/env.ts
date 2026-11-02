@@ -29,7 +29,13 @@ export interface ShopRow {
   min_notice_min: number;
   booking_days_ahead: number;
   active: number;
+  plan: string;
+  plan_expires_at: string | null;
+  notes: string;
+  created_at: string;
 }
+
+export type Role = "platform" | "owner" | "barber";
 
 export interface UserRow {
   id: number;
@@ -37,10 +43,34 @@ export interface UserRow {
   barber_id: number | null;
   username: string;
   name: string;
-  role: string;
+  role: Role;
+  active: number;
+  /** Set when a platform admin has opened a shop's admin. */
+  acting_shop_id: number | null;
+  /** Hash of the session cookie, to update the session. */
+  session_hash: string;
+}
+
+export interface BarberRow {
+  id: number;
+  shop_id: number;
+  name: string;
+  active: number;
+  sort: number;
 }
 
 export type AppEnv = {
   Bindings: Env;
-  Variables: { user: UserRow; shop: ShopRow; barberId: number };
+  Variables: {
+    user: UserRow;
+    shop: ShopRow;
+    /** Role inside the shop: a platform admin viewing a shop acts as its owner. */
+    role: "owner" | "barber";
+    /** The logged-in person's own barber (null for a platform admin or an owner who doesn't cut). */
+    ownBarberId: number | null;
+    /** All barbers of the shop, active first. */
+    barbers: BarberRow[];
+    /** Barbers whose schedules this login may see and change. */
+    allowedBarberIds: number[];
+  };
 };

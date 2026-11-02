@@ -81,6 +81,8 @@ export function Book() {
   });
   const [date, setDate] = useState<string | null>(null);
   const [start, setStart] = useState<number | null>(null);
+  // "any" = first available barber; only offered when the shop has more than one.
+  const [barber, setBarber] = useState<number | "any">("any");
 
   useEffect(() => {
     if (shop && !date) setDate(shop.today);
@@ -162,6 +164,11 @@ export function Book() {
           }}
           start={start}
           setStart={setStart}
+          barber={barber}
+          setBarber={(b) => {
+            setBarber(b);
+            setStart(null);
+          }}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -176,6 +183,7 @@ export function Book() {
           duration={totalDur}
           date={date}
           start={start}
+          barber={barber}
           onBack={() => setStep(2)}
           onTaken={() => {
             setStart(null);
@@ -196,10 +204,12 @@ function TimeStep(props: {
   setDate: (d: string) => void;
   start: number | null;
   setStart: (m: number) => void;
+  barber: number | "any";
+  setBarber: (b: number | "any") => void;
   onBack: () => void;
   onNext: () => void;
 }) {
-  const { shop, date, start } = props;
+  const { shop, date, start, barber } = props;
   const days = useMemo(() => Array.from({ length: shop.booking_days_ahead + 1 }, (_, i) => addDays(shop.today, i)), [shop]);
   const usualOpen = useMemo(() => {
     const counts = new Map<number, number>();
@@ -207,8 +217,8 @@ function TimeStep(props: {
     return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   }, [shop]);
   const { data, error, loading, reload } = useData(
-    () => api.get<SlotsDto>(`/shops/${shop.slug}/slots?date=${date}&services=${props.serviceIds.join(",")}`),
-    [date, props.serviceIds.join(",")]
+    () => api.get<SlotsDto>(`/shops/${shop.slug}/slots?date=${date}&services=${props.serviceIds.join(",")}&barber=${barber}`),
+    [date, props.serviceIds.join(","), barber]
   );
 
   const groups = useMemo(() => {
@@ -228,6 +238,31 @@ function TimeStep(props: {
         <h1 className="display text-[38px] leading-tight">Pick a time</h1>
         <p className="text-[15px] text-ink-soft">{props.summary}</p>
       </div>
+
+      {shop.barbers.length > 1 && (
+        <div className="flex flex-col gap-2 pt-4">
+          <span className="eyebrow px-5">Barber</span>
+          <div className="flex gap-2 overflow-x-auto px-5 [scrollbar-width:none]" role="radiogroup" aria-label="Barber">
+            {[{ id: "any" as const, name: "Any available" }, ...shop.barbers].map((b) => {
+              const on = b.id === barber;
+              return (
+                <button
+                  key={String(b.id)}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => props.setBarber(b.id)}
+                  className={`h-11 shrink-0 rounded-full border px-4 text-[15px] transition-colors ${
+                    on ? "border-[var(--accent)] bg-[var(--accent)] text-cream" : "border-line hover:bg-surface"
+                  }`}
+                >
+                  {b.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto px-5 py-4 [scrollbar-width:none]" role="listbox" aria-label="Date">
         {days.map((d) => {
@@ -322,6 +357,7 @@ function DetailsStep(props: {
   duration: number;
   date: string;
   start: number;
+  barber: number | "any";
   onBack: () => void;
   onTaken: () => void;
   onDone: (token: string) => void;
@@ -372,6 +408,7 @@ function DetailsStep(props: {
         service_ids: props.serviceIds,
         date: props.date,
         start_min: props.start,
+        barber_id: props.barber,
         phone: e164,
         name: name.trim(),
         whatsapp: waE164 ?? "",
@@ -451,6 +488,7 @@ function DetailsStep(props: {
         <div className="flex justify-between text-ink-soft">
           <span>
             {fmtDateLong(props.date)} · {fmtMin(props.start)}
+            {shop.barbers.length > 1 && props.barber !== "any" ? ` · ${shop.barbers.find((b) => b.id === props.barber)?.name ?? ""}` : ""}
           </span>
           <span>{fmtDuration(props.duration)}</span>
         </div>

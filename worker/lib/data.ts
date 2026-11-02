@@ -32,6 +32,48 @@ export function settingsOf(shop: ShopRow): ShopSettings {
   };
 }
 
+export interface BarberInfo {
+  id: number;
+  name: string;
+}
+
+export async function activeBarbers(db: D1Database, shopId: number): Promise<BarberInfo[]> {
+  const { results } = await db
+    .prepare("SELECT id, name FROM barbers WHERE shop_id = ? AND active = 1 ORDER BY sort, id")
+    .bind(shopId)
+    .all<BarberInfo>();
+  return results;
+}
+
+/** Gives a new barber a starting week: copied from another barber, or 10:00-22:00 with Friday from 16:00. */
+export async function seedBarberSchedule(db: D1Database, shopId: number, barberId: number, copyFrom: number | null) {
+  if (copyFrom) {
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO working_hours (barber_id, shop_id, weekday, open_min, close_min, closed)
+           SELECT ?, shop_id, weekday, open_min, close_min, closed FROM working_hours WHERE barber_id = ?`
+        )
+        .bind(barberId, copyFrom),
+      db
+        .prepare(
+          `INSERT INTO breaks (shop_id, barber_id, weekday, start_min, end_min, label)
+           SELECT shop_id, ?, weekday, start_min, end_min, label FROM breaks WHERE barber_id = ?`
+        )
+        .bind(barberId, copyFrom),
+    ]);
+    const n = await db.prepare("SELECT COUNT(*) AS n FROM working_hours WHERE barber_id = ?").bind(barberId).first<{ n: number }>();
+    if ((n?.n ?? 0) > 0) return;
+  }
+  await db.batch(
+    [0, 1, 2, 3, 4, 5, 6].map((wd) =>
+      db
+        .prepare("INSERT OR IGNORE INTO working_hours (barber_id, shop_id, weekday, open_min, close_min, closed) VALUES (?, ?, ?, ?, 1320, 0)")
+        .bind(barberId, shopId, wd, wd === 5 ? 960 : 600)
+    )
+  );
+}
+
 export async function defaultBarberId(db: D1Database, shopId: number): Promise<number> {
   const b = await db
     .prepare("SELECT id FROM barbers WHERE shop_id = ? AND active = 1 ORDER BY sort, id LIMIT 1")
@@ -161,6 +203,8 @@ export async function loadDay(
 
 interface BookingJoinRow {
   id: number;
+  barber_id: number;
+  barber_name: string | null;
   token: string;
   status: BookingStatus;
   source: BookingSource;
@@ -189,14 +233,16 @@ interface BookingJoinRow {
 }
 
 export const BOOKING_SELECT = `
-  SELECT b.id, b.token, b.status, b.source, b.date, b.start_min, b.duration_min, b.price_total,
+  SELECT b.id, b.barber_id, br.name AS barber_name, b.token, b.status, b.source, b.date, b.start_min, b.duration_min, b.price_total,
          b.started_at, b.finished_at, b.reminder_sent_at, b.confirmed_at, b.created_at,
          b.cancelled_by, b.cancelled_at, b.seen_at,
          c.id AS c_id, c.phone AS c_phone, c.name AS c_name, c.whatsapp AS c_whatsapp, c.prefs AS c_prefs,
          c.notes AS c_notes, c.is_guest AS c_is_guest, c.created_at AS c_created_at,
          (SELECT COUNT(*) FROM bookings x WHERE x.customer_id = c.id AND x.status = 'done') AS c_visits,
          (SELECT COUNT(*) FROM bookings x WHERE x.customer_id = c.id AND x.status = 'no_show') AS c_no_shows
-  FROM bookings b LEFT JOIN customers c ON c.id = b.customer_id`;
+  FROM bookings b
+  LEFT JOIN customers c ON c.id = b.customer_id
+  LEFT JOIN barbers br ON br.id = b.barber_id`;
 
 export function parsePrefs(s: string | null): string[] {
   try {
@@ -248,6 +294,8 @@ export async function queryBookings(db: D1Database, where: string, params: unkno
   }
   return results.map((r) => ({
     id: r.id,
+    barber_id: r.barber_id,
+    barber_name: r.barber_name ?? "",
     token: r.token,
     status: r.status,
     source: r.source,

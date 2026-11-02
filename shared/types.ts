@@ -57,6 +57,7 @@ export interface ShopSettings {
 
 export interface PublicShopDto {
   slug: string;
+  barbers: { id: number; name: string }[];
   name: string;
   tagline: string;
   about: string;
@@ -96,6 +97,7 @@ export interface BookingServiceDto {
 
 export interface PublicBookingDto {
   token: string;
+  barber_name: string;
   status: BookingStatus;
   date: string;
   start_min: number;
@@ -133,6 +135,8 @@ export interface CustomerDto {
 
 export interface AdminBookingDto {
   id: number;
+  barber_id: number;
+  barber_name: string;
   token: string;
   status: BookingStatus;
   source: BookingSource;
@@ -152,22 +156,44 @@ export interface AdminBookingDto {
   customer: (CustomerDto & { visits: number; no_shows: number }) | null;
 }
 
+/** One barber's working day, for the Today schedule. */
+export interface BarberDayDto {
+  barber_id: number;
+  barber_name: string;
+  hours: { open_min: number; close_min: number } | null;
+  breaks: { start_min: number; end_min: number; label: string }[];
+  time_off: TimeOffDto[];
+}
+
 export interface TodayDto {
   date: string;
   now_min: number;
   now_date: string;
   settings: ShopSettings;
-  hours: { open_min: number; close_min: number } | null;
-  breaks: { start_min: number; end_min: number; label: string }[];
-  time_off: TimeOffDto[];
+  /** The barbers shown (one, or all for an owner). */
+  days: BarberDayDto[];
   bookings: AdminBookingDto[];
   requests: AdminBookingDto[];
   /** Customer cancellations the barber hasn't dismissed yet. */
   cancellations: AdminBookingDto[];
 }
 
+export type UserRole = "platform" | "owner" | "barber";
+
+export interface BarberDto {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
 export interface MeDto {
-  user: { id: number; username: string; name: string; role: string };
+  user: { id: number; username: string; name: string; role: UserRole };
+  /** Role inside the current shop: a platform admin viewing a shop acts as owner. */
+  shop_role: "owner" | "barber" | null;
+  /** True when a platform admin is viewing a shop's admin. */
+  acting: boolean;
+  own_barber_id: number | null;
+  barbers: BarberDto[];
   shop: {
     id: number;
     slug: string;
@@ -195,4 +221,30 @@ export interface AdminShopDto extends ShopSettings {
   logo_url: string | null;
   cover_url: string | null;
   gallery: GalleryDto[];
+}
+
+export interface TeamMemberDto {
+  id: number;
+  name: string;
+  active: boolean;
+  /** Login for this barber, if they have one. */
+  username: string | null;
+  role: "owner" | "barber" | null;
+  upcoming: number;
+}
+
+export interface PlatformShopDto {
+  id: number;
+  slug: string;
+  name: string;
+  area: string;
+  active: boolean;
+  plan: string;
+  plan_expires_at: string | null;
+  notes: string;
+  created_at: string;
+  owner: { id: number; username: string; name: string } | null;
+  barbers: number;
+  bookings_30d: number;
+  customers: number;
 }

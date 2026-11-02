@@ -6,8 +6,10 @@ import type { BreakDto, DayHoursDto, ShopSettings, TimeOffDto } from "../../../s
 import { fmtDateLong, fmtMin, parseHHMM, WEEKDAYS_LONG } from "../../../shared/time";
 import { ErrorNote, SectionTitle, Spinner, Switch, Toast } from "../../components/ui";
 import { Icon } from "../../components/Icon";
+import { BarberChips, useAdmin } from "./AdminLayout";
 
 interface Schedule {
+  barber_id: number;
   hours: DayHoursDto[];
   breaks: BreakDto[];
   time_off: TimeOffDto[];
@@ -25,28 +27,36 @@ const fromInput = (s: string, isClose = false) => {
 };
 
 export function Hours() {
-  useDocumentTitle("Hours & breaks");
-  const { data, error, reload, setData } = useData(() => api.get<Schedule>("/admin/schedule"), []);
+  const { isOwner, defaultBarberId, barbers } = useAdmin();
+  useDocumentTitle(isOwner ? "Hours & breaks" : "My hours");
+  const [barber, setBarber] = useState<number | null>(defaultBarberId);
+  const { data, error, reload, setData } = useData(() => api.get<Schedule>(`/admin/schedule?barber=${barber ?? ""}`), [barber]);
   const [toast, setToast] = useState<string | null>(null);
 
   if (error && !data) return <div className="p-5"><ErrorNote message={error} onRetry={reload} /></div>;
   if (!data) return <Spinner />;
+  const who = barbers.length > 1 ? barbers.find((b) => b.id === data.barber_id)?.name : null;
+  // Re-mount the editors when switching barber so drafts don't carry over.
+  const k = data.barber_id;
 
   return (
     <>
       <header className="px-5 pt-6 pb-2">
-        <h1 className="display text-[36px]">Hours &amp; breaks</h1>
+        <h1 className="display text-[36px]">{isOwner ? <>Hours &amp; breaks</> : "My hours"}</h1>
+        {isOwner && who && <p className="pt-1 text-sm text-muted">Each barber has their own hours, breaks and time off.</p>}
       </header>
-      <WeeklyHours hours={data.hours} onSaved={(hours) => { setData({ ...data, hours }); setToast("Hours saved"); }} />
-      <Breaks breaks={data.breaks} onChange={(breaks) => setData({ ...data, breaks })} />
-      <TimeOff items={data.time_off} today={data.today} onChange={() => void reload()} />
-      <Rules settings={data.settings} onSaved={(settings) => { setData({ ...data, settings }); setToast("Rules saved"); }} />
+      {isOwner && barber !== null && <BarberChips value={barber} onChange={(v) => v !== "all" && setBarber(v)} label="Barber" />}
+      <WeeklyHours key={`h${k}`} barberId={k} hours={data.hours} onSaved={(hours) => { setData({ ...data, hours }); setToast(who ? `${who}'s hours saved` : "Hours saved"); }} />
+      <Breaks key={`b${k}`} barberId={k} breaks={data.breaks} onChange={(breaks) => setData({ ...data, breaks })} />
+      <TimeOff key={`t${k}`} barberId={k} items={data.time_off} today={data.today} onChange={() => void reload()} />
+      {isOwner && <Rules settings={data.settings} onSaved={(settings) => { setData({ ...data, settings }); setToast("Rules saved"); }} />}
+      {!isOwner && <div className="pb-8" />}
       <Toast message={toast} onDone={() => setToast(null)} />
     </>
   );
 }
 
-function WeeklyHours({ hours, onSaved }: { hours: DayHoursDto[]; onSaved: (h: DayHoursDto[]) => void }) {
+function WeeklyHours({ barberId, hours, onSaved }: { barberId: number; hours: DayHoursDto[]; onSaved: (h: DayHoursDto[]) => void }) {
   const [rows, setRows] = useState(() => hours.map((h) => ({ ...h, open: toInput(h.open_min), close: toInput(h.close_min) })));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,7 +81,7 @@ function WeeklyHours({ hours, onSaved }: { hours: DayHoursDto[]; onSaved: (h: Da
     }
     setBusy(true);
     try {
-      onSaved(await api.put<DayHoursDto[]>("/admin/hours", { days }));
+      onSaved(await api.put<DayHoursDto[]>("/admin/hours", { days, barber_id: barberId }));
       setDirty(false);
     } catch (e) {
       setError(errorMessage(e));
@@ -114,7 +124,7 @@ function WeeklyHours({ hours, onSaved }: { hours: DayHoursDto[]; onSaved: (h: Da
   );
 }
 
-function Breaks({ breaks, onChange }: { breaks: BreakDto[]; onChange: (b: BreakDto[]) => void }) {
+function Breaks({ barberId, breaks, onChange }: { barberId: number; breaks: BreakDto[]; onChange: (b: BreakDto[]) => void }) {
   const [draft, setDraft] = useState<{ id: number | null; weekday: string; start: string; end: string; label: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,7 +134,7 @@ function Breaks({ breaks, onChange }: { breaks: BreakDto[]; onChange: (b: BreakD
     const start = fromInput(draft.start);
     const end = fromInput(draft.end, true);
     if (start === null || end === null || end <= start) return setError("A break must end after it starts");
-    const body = { weekday: draft.weekday === "" ? null : Number(draft.weekday), start_min: start, end_min: end, label: draft.label || "Break" };
+    const body = { barber_id: barberId, weekday: draft.weekday === "" ? null : Number(draft.weekday), start_min: start, end_min: end, label: draft.label || "Break" };
     try {
       onChange(draft.id ? await api.put<BreakDto[]>(`/admin/breaks/${draft.id}`, body) : await api.post<BreakDto[]>("/admin/breaks", body));
       setDraft(null);
@@ -217,7 +227,7 @@ function Breaks({ breaks, onChange }: { breaks: BreakDto[]; onChange: (b: BreakD
   );
 }
 
-function TimeOff({ items, today, onChange }: { items: TimeOffDto[]; today: string; onChange: () => void }) {
+function TimeOff({ barberId, items, today, onChange }: { barberId: number; items: TimeOffDto[]; today: string; onChange: () => void }) {
   const [draft, setDraft] = useState<{ date: string; allDay: boolean; start: string; end: string; reason: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -228,7 +238,7 @@ function TimeOff({ items, today, onChange }: { items: TimeOffDto[]; today: strin
     const end = fromInput(draft.end, true);
     if (!draft.allDay && (start === null || end === null || end <= start)) return setError("Time off must end after it starts");
     try {
-      await api.post("/admin/time-off", { date: draft.date, all_day: draft.allDay, start_min: start, end_min: end, reason: draft.reason });
+      await api.post("/admin/time-off", { barber_id: barberId, date: draft.date, all_day: draft.allDay, start_min: start, end_min: end, reason: draft.reason });
       setDraft(null);
       setError(null);
       onChange();

@@ -10,25 +10,50 @@ import { actualMinutes, elapsedSeconds, fmtTimer, lateBy, liveNow, reminderState
 import { customerWhatsApp, messages, openWhatsApp } from "../../lib/messages";
 import { ErrorNote, Pill, SectionTitle, Spinner, Toast } from "../../components/ui";
 import { Icon } from "../../components/Icon";
-import { useAdmin } from "./AdminLayout";
+import { BarberChips, useAdmin } from "./AdminLayout";
+
+const FILTER_KEY = "bb:today-barber";
+
+function loadFilter(): number | "all" {
+  try {
+    const v = localStorage.getItem(FILTER_KEY);
+    return v && v !== "all" ? Number(v) : "all";
+  } catch {
+    return "all";
+  }
+}
 
 type Row =
   | { kind: "booking"; at: number; b: AdminBookingDto }
   | { kind: "break"; at: number; end: number; label: string };
 
 export function Today() {
-  const { shop, shopInfo } = useAdmin();
+  const { shop, shopInfo, isOwner, barbers, defaultBarberId } = useAdmin();
   useDocumentTitle("Today");
   const [offset, setOffset] = useState(0);
+  // Owners can look at everyone or one barber; barbers always see their own day.
+  const [filter, setFilterState] = useState<number | "all">(() => {
+    const f = loadFilter();
+    return f === "all" || barbers.some((b) => b.id === f) ? f : "all";
+  });
+  const setFilter = (f: number | "all") => {
+    setFilterState(f);
+    try {
+      localStorage.setItem(FILTER_KEY, String(f));
+    } catch {
+      /* fine */
+    }
+  };
+  const barberParam = isOwner && barbers.length > 1 ? `barber=${filter}` : "";
   const loadedAt = useRef(Date.now());
   const { data, error, reload, setData } = useData(
     async () => {
-      const base = await api.get<TodayDto>("/admin/today");
-      const d = offset === 0 ? base : await api.get<TodayDto>(`/admin/today?date=${addDays(base.now_date, offset)}`);
+      const base = await api.get<TodayDto>(`/admin/today?${barberParam}`);
+      const d = offset === 0 ? base : await api.get<TodayDto>(`/admin/today?date=${addDays(base.now_date, offset)}&${barberParam}`);
       loadedAt.current = Date.now();
       return d;
     },
-    [offset],
+    [offset, barberParam],
     { pollMs: 30000 }
   );
   const [toast, setToast] = useState<string | null>(null);
@@ -41,18 +66,31 @@ export function Today() {
   const now = data ? liveNow(data.now_date, data.now_min, loadedAt.current) : null;
   const isToday = !!data && data.date === data.now_date;
 
+  const multi = (data?.days.length ?? 0) > 1;
   const rows = useMemo<Row[]>(() => {
     if (!data) return [];
     const r: Row[] = data.bookings.map((b) => ({ kind: "booking", at: b.start_min, b }));
-    data.breaks.forEach((b) => r.push({ kind: "break", at: b.start_min, end: b.end_min, label: b.label }));
-    data.time_off.forEach((t) => r.push({ kind: "break", at: t.start_min, end: t.end_min, label: t.reason || "Time off" }));
+    for (const d of data.days) {
+      const who = data.days.length > 1 ? `${d.barber_name}: ` : "";
+      d.breaks.forEach((b) => r.push({ kind: "break", at: b.start_min, end: b.end_min, label: who + b.label }));
+      d.time_off.forEach((t) => r.push({ kind: "break", at: t.start_min, end: t.end_min, label: who + (t.reason || "Time off") }));
+    }
     return r.sort((a, b) => a.at - b.at);
   }, [data]);
 
   if (error && !data) return <div className="p-5"><ErrorNote message={error} onRetry={reload} /></div>;
   if (!data || !now) return <Spinner />;
 
-  const delay = isToday ? runningDelay(data.bookings, now, data.settings, shop.timezone) : null;
+  // Each barber can be running late independently.
+  const delays = isToday
+    ? data.days
+        .map((d) => runningDelay(data.bookings.filter((b) => b.barber_id === d.barber_id), now, data.settings, shop.timezone))
+        .filter((x): x is NonNullable<typeof x> => !!x && x.overByMin > 0)
+    : [];
+  const delayFor = (id: number) => delays.find((x) => x.next?.id === id)?.delayMin ?? 0;
+  const allClosed = data.days.length > 0 && data.days.every((d) => !d.hours);
+  const breakBarber = filter === "all" ? defaultBarberId : filter;
+  const breakBarberName = barbers.find((b) => b.id === breakBarber)?.name;
   const booked = data.bookings.filter((b) => ["confirmed", "in_progress", "done"].includes(b.status)).length;
   const done = data.bookings.filter((b) => b.status === "done").length;
 
@@ -85,8 +123,8 @@ export function Today() {
   const quickBreak = async (minutes: number) => {
     setShowBreak(false);
     try {
-      await api.post("/admin/quick-break", { minutes });
-      setToast(`Bookings paused for ${minutes} minutes`);
+      await api.post("/admin/quick-break", { minutes, barber_id: breakBarber });
+      setToast(`${breakBarberName && barbers.length > 1 ? `${breakBarberName}'s bookings` : "Bookings"} paused for ${minutes} minutes`);
       void reload();
     } catch (e) {
       setToast(errorMessage(e));
@@ -116,14 +154,16 @@ export function Today() {
             </button>
           )}
         </div>
-        {isToday && (
+        {isToday && breakBarber && (
           <div className="relative">
             <button type="button" className="btn-quiet border-ink" onClick={() => setShowBreak((s) => !s)} aria-expanded={showBreak}>
               <Icon name="pause" size={16} /> Take a break
             </button>
             {showBreak && (
               <div className="absolute right-0 z-30 mt-2 flex w-56 flex-col gap-2 rounded-2xl bg-ink p-4 text-cream shadow-xl">
-                <span className="text-xs text-[#CFC5B5]">Blocks new bookings from now</span>
+                <span className="text-xs text-[#CFC5B5]">
+                  Blocks new bookings{barbers.length > 1 && breakBarberName ? ` for ${breakBarberName}` : ""} from now
+                </span>
                 <div className="grid grid-cols-3 gap-2">
                   {[15, 30, 60].map((m) => (
                     <button key={m} type="button" onClick={() => quickBreak(m)} className="h-11 rounded-full border border-[#6E665B] text-sm hover:bg-white/10">
@@ -137,12 +177,16 @@ export function Today() {
         )}
       </header>
 
-      {delay && delay.overByMin > 0 && (
-        <div className="mx-5 mt-2 flex flex-col gap-3 rounded-2xl border border-amber-line bg-amber-bg p-4" role="status">
+      {isOwner && <BarberChips value={filter} onChange={setFilter} allowAll label="Show schedule for" />}
+
+      {delays.map((delay) => (
+        <div key={delay.running.id} className="mx-5 mt-2 flex flex-col gap-3 rounded-2xl border border-amber-line bg-amber-bg p-4" role="status">
           <div className="flex items-start gap-2.5 text-amber-ink">
             <Icon name="clock" className="mt-px shrink-0" />
             <div className="flex flex-col gap-1">
-              <span className="text-[15px] font-semibold">Running ~{delay.delayMin || delay.overByMin} min behind</span>
+              <span className="text-[15px] font-semibold">
+                {multi ? `${delay.running.barber_name} is r` : "R"}unning ~{delay.delayMin || delay.overByMin} min behind
+              </span>
               <span className="text-[13px] leading-snug">
                 {delay.running.customer?.name || "This visit"} is over by {delay.overByMin} min.
                 {delay.next && delay.delayMin > 0
@@ -161,7 +205,7 @@ export function Today() {
             </button>
           )}
         </div>
-      )}
+      ))}
 
       <div className="grid grid-cols-3 gap-2 px-5 pt-3.5 pb-1">
         <div className="flex flex-col gap-1 rounded-[14px] bg-surface p-3.5">
@@ -195,7 +239,8 @@ export function Today() {
               <Link to={`/admin/bookings/${c.id}`} className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate text-[15px] font-medium">{c.customer?.name || "Customer"} cancelled</span>
                 <span className="truncate text-[13px] text-ink-soft">
-                  {when(c.date, c.start_min)} · {serviceNames(c.services)}
+                  {when(c.date, c.start_min)} · {barbers.length > 1 ? `${c.barber_name} · ` : ""}
+                  {serviceNames(c.services)}
                 </span>
                 <span className="text-xs text-muted">The slot is free again.</span>
               </Link>
@@ -220,7 +265,10 @@ export function Today() {
               <Link to={`/admin/bookings/${r.id}`} className="flex justify-between gap-3">
                 <span className="flex min-w-0 flex-col gap-1">
                   <span className="truncate text-base font-medium">{r.customer?.name || "Customer"}</span>
-                  <span className="text-[13px] text-muted">{serviceNames(r.services)}</span>
+                  <span className="text-[13px] text-muted">
+                    {barbers.length > 1 ? `${r.barber_name} · ` : ""}
+                    {serviceNames(r.services)}
+                  </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
                   <span className="text-[15px]">{when(r.date, r.start_min)}</span>
@@ -247,8 +295,8 @@ export function Today() {
 
       <section className="flex flex-col px-5 pt-5 pb-4">
         <SectionTitle>Schedule</SectionTitle>
-        {!data.hours && <p className="py-3 text-[15px] text-muted">Closed on this day.</p>}
-        {data.hours && rows.length === 0 && <p className="py-3 text-[15px] text-muted">No bookings yet.</p>}
+        {allClosed && <p className="py-3 text-[15px] text-muted">Closed on this day.</p>}
+        {!allClosed && rows.length === 0 && <p className="py-3 text-[15px] text-muted">No bookings yet.</p>}
         {rows.map((row) =>
           row.kind === "break" ? (
             <div key={`br-${row.at}-${row.label}`} className="flex min-h-[52px] items-center gap-3 border-b border-line py-3">
@@ -258,7 +306,7 @@ export function Today() {
               </span>
             </div>
           ) : (
-            <ScheduleRow key={row.b.id} b={row.b} data={data} isToday={isToday} now={now} busy={busyId === row.b.id} act={act} delayMin={delay?.next?.id === row.b.id ? delay.delayMin : 0} />
+            <ScheduleRow key={row.b.id} b={row.b} data={data} isToday={isToday} now={now} busy={busyId === row.b.id} act={act} delayMin={delayFor(row.b.id)} showBarber={multi} />
           )
         )}
       </section>
@@ -275,6 +323,7 @@ function ScheduleRow({
   busy,
   act,
   delayMin,
+  showBarber,
 }: {
   b: AdminBookingDto;
   data: TodayDto;
@@ -283,12 +332,13 @@ function ScheduleRow({
   busy: boolean;
   act: (b: AdminBookingDto, action: string, wa?: string) => void;
   delayMin: number;
+  showBarber: boolean;
 }) {
   const { shopInfo } = useAdmin();
   const name = b.customer?.name || "Guest";
   const late = isToday ? lateBy(b, now) : 0;
   const rem = reminderState(b, now, data.settings);
-  const anyRunning = data.bookings.some((x) => x.status === "in_progress");
+  const anyRunning = data.bookings.some((x) => x.status === "in_progress" && x.barber_id === b.barber_id);
   const startSoon = isToday && b.status === "confirmed" && b.start_min - now.min <= 30 && !anyRunning;
 
   let right: React.ReactNode = null;
@@ -354,7 +404,10 @@ function ScheduleRow({
         <span className={`truncate text-[15px] ${b.status === "cancelled" ? "text-muted line-through" : ""}`}>
           {b.source === "walkin" ? `Walk-in · ${name}` : name}
         </span>
-        <span className={`truncate text-xs text-muted ${b.status === "cancelled" ? "line-through" : ""}`}>{serviceNames(b.services)}</span>
+        <span className={`truncate text-xs text-muted ${b.status === "cancelled" ? "line-through" : ""}`}>
+          {showBarber ? `${b.barber_name} · ` : ""}
+          {serviceNames(b.services)}
+        </span>
       </Link>
       {right}
     </div>

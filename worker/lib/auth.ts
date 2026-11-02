@@ -1,7 +1,7 @@
 // Password hashing (PBKDF2 via WebCrypto) and cookie sessions stored in D1.
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import type { AppEnv, ShopRow, UserRow } from "../env";
+import type { AppEnv, BarberRow, ShopRow, UserRow } from "../env";
 import { HttpError, randomToken, sha256Hex } from "./util";
 
 const COOKIE = "sid";
@@ -68,34 +68,63 @@ export async function destroySession(c: Context<AppEnv>): Promise<void> {
 export async function currentUser(c: Context<AppEnv>): Promise<UserRow | null> {
   const token = getCookie(c, COOKIE);
   if (!token) return null;
+  const hash = await sha256Hex(token);
   const row = await c.env.DB.prepare(
-    `SELECT u.id, u.shop_id, u.barber_id, u.username, u.name, u.role, s.expires_at
+    `SELECT u.id, u.shop_id, u.barber_id, u.username, u.name, u.role, u.active, s.acting_shop_id, s.expires_at
      FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`
   )
-    .bind(await sha256Hex(token))
-    .first<UserRow & { expires_at: string }>();
-  if (!row || new Date(row.expires_at) < new Date()) return null;
+    .bind(hash)
+    .first<Omit<UserRow, "session_hash"> & { expires_at: string }>();
+  if (!row || new Date(row.expires_at) < new Date() || !row.active) return null;
   const { expires_at: _ignored, ...user } = row;
-  return user;
+  return { ...user, session_hash: hash };
 }
 
-/** Requires a logged-in shop owner; sets user, shop and barberId on the context. */
+export async function shopBarbers(db: D1Database, shopId: number): Promise<BarberRow[]> {
+  const { results } = await db
+    .prepare("SELECT id, shop_id, name, active, sort FROM barbers WHERE shop_id = ? ORDER BY active DESC, sort, id")
+    .bind(shopId)
+    .all<BarberRow>();
+  return results;
+}
+
+/**
+ * Requires a login with access to a shop: its owner, one of its barbers, or a platform admin
+ * who has opened the shop. Sets user, shop, role, barbers and which barbers this login may manage.
+ */
 export const requireShopUser: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = await currentUser(c);
   if (!user) throw new HttpError(401, "Please log in");
-  if (!user.shop_id) throw new HttpError(403, "This login isn't linked to a shop");
-  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(user.shop_id).first<ShopRow>();
+  const shopId = user.role === "platform" ? user.acting_shop_id : user.shop_id;
+  if (!shopId) throw new HttpError(403, user.role === "platform" ? "Open a shop from the platform page first" : "This login isn't linked to a shop");
+  const shop = await c.env.DB.prepare("SELECT * FROM shops WHERE id = ?").bind(shopId).first<ShopRow>();
   if (!shop) throw new HttpError(403, "Shop not found");
-  let barberId = user.barber_id;
-  if (!barberId) {
-    const b = await c.env.DB.prepare("SELECT id FROM barbers WHERE shop_id = ? AND active = 1 ORDER BY sort, id LIMIT 1")
-      .bind(shop.id)
-      .first<{ id: number }>();
-    if (!b) throw new HttpError(403, "This shop has no barber yet");
-    barberId = b.id;
-  }
+  if (!shop.active && user.role !== "platform") throw new HttpError(403, "This shop is paused. Please contact the platform admin.");
+  const barbers = await shopBarbers(c.env.DB, shop.id);
+  const active = barbers.filter((b) => b.active).map((b) => b.id);
+  const role = user.role === "barber" ? "barber" : "owner";
+  const own = user.role === "platform" ? null : user.barber_id;
+  if (role === "barber" && (!own || !active.includes(own))) throw new HttpError(403, "Your barber profile is inactive. Please ask the shop owner.");
   c.set("user", user);
   c.set("shop", shop);
-  c.set("barberId", barberId);
+  c.set("role", role);
+  c.set("ownBarberId", own);
+  c.set("barbers", barbers);
+  c.set("allowedBarberIds", role === "owner" ? active : [own!]);
+  await next();
+};
+
+/** Owner-only actions inside a shop (services, shop page, team, booking rules). */
+export const requireOwner: MiddlewareHandler<AppEnv> = async (c, next) => {
+  if (c.get("role") !== "owner") throw new HttpError(403, "Only the shop owner can change this");
+  await next();
+};
+
+/** Platform admin only. */
+export const requirePlatform: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const user = await currentUser(c);
+  if (!user) throw new HttpError(401, "Please log in");
+  if (user.role !== "platform") throw new HttpError(403, "Platform admins only");
+  c.set("user", user);
   await next();
 };

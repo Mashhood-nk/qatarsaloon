@@ -9,12 +9,15 @@ import { fmtDuration } from "../../../shared/time";
 import { BackLink, ErrorNote, Spinner, Switch } from "../../components/ui";
 import { Icon } from "../../components/Icon";
 import { PhoneField, type PhoneValue } from "../../components/PhoneField";
+import { BarberChips, useAdmin } from "./AdminLayout";
 
 export function WalkIn() {
   useDocumentTitle("Add walk-in");
   const navigate = useNavigate();
+  const { defaultBarberId, isOwner } = useAdmin();
+  const [barber, setBarber] = useState<number | null>(defaultBarberId);
   const services = useData(() => api.get<ServiceDto[]>("/admin/services"), []);
-  const free = useData(() => api.get<{ free_min: number; buffer_min: number }>("/admin/free-now"), []);
+  const free = useData(() => api.get<{ free_min: number; buffer_min: number }>(`/admin/free-now?barber=${barber ?? ""}`), [barber]);
   const [picked, setPicked] = useState<number[]>([]);
   const [guest, setGuest] = useState(false);
   const [phone, setPhone] = useState<PhoneValue>({ dial: "974", local: "" });
@@ -44,6 +47,7 @@ export function WalkIn() {
     try {
       await api.post<AdminBookingDto>("/admin/walkins", {
         service_ids: picked,
+        barber_id: barber,
         phone: e164 ?? "",
         name: guest ? "" : name.trim(),
         start_now: startNow,
@@ -63,6 +67,7 @@ export function WalkIn() {
         <span className="text-[13px] text-muted">Today</span>
       </header>
       <h1 className="display px-5 pt-3 pb-2 text-[36px]">Add walk-in</h1>
+      {isOwner && barber !== null && <BarberChips value={barber} onChange={(v) => v !== "all" && setBarber(v)} label="Barber for this walk-in" />}
 
       <section className="flex flex-col gap-2.5 px-5 py-2">
         <span className="label">Services</span>

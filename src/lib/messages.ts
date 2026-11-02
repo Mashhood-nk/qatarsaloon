@@ -29,7 +29,9 @@ const dayRef = (b: AdminBookingDto, today: string) => (b.date === today ? "today
 
 export const messages = {
   confirm: (b: AdminBookingDto, shop: ShopInfo) =>
-    `${hi(b)}, your ${serviceNames(b.services)} is confirmed for ${fmtDateLong(b.date)} at ${fmtMin12(b.start_min)}. ` +
+    `${hi(b)}, your ${serviceNames(b.services)}${b.barber_name ? ` with ${b.barber_name}` : ""} is confirmed for ${fmtDateLong(b.date)} at ${fmtMin12(
+      b.start_min
+    )}. ` +
     `See you at ${shop.name}${shop.address ? `, ${shop.address}` : ""}. ` +
     `Your booking (to view or change it): ${bookingLink(b.token)}`,
 

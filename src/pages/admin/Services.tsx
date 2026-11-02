@@ -7,11 +7,19 @@ import { fmtDuration } from "../../../shared/time";
 import { money } from "../../lib/format";
 import { ErrorNote, Spinner, Switch } from "../../components/ui";
 import { Icon } from "../../components/Icon";
-import { useAdmin } from "./AdminLayout";
+import { OwnerOnly, useAdmin } from "./AdminLayout";
 
 type Draft = { id: number | null; name: string; duration: string; price: string; active: boolean };
 
 export function Services() {
+  return (
+    <OwnerOnly>
+      <ServicesInner />
+    </OwnerOnly>
+  );
+}
+
+function ServicesInner() {
   useDocumentTitle("Services");
   const { shop } = useAdmin();
   const { data, error, reload, setData } = useData(() => api.get<ServiceDto[]>("/admin/services"), []);

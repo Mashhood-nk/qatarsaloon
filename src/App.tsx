@@ -12,6 +12,8 @@ import { CustomerDetail } from "./pages/admin/CustomerDetail";
 import { Services } from "./pages/admin/Services";
 import { Hours } from "./pages/admin/Hours";
 import { ShopSettings } from "./pages/admin/ShopSettings";
+import { Team } from "./pages/admin/Team";
+import { Platform } from "./pages/platform/Platform";
 
 function Home() {
   return (
@@ -50,7 +52,9 @@ export function App() {
         <Route path="services" element={<Services />} />
         <Route path="hours" element={<Hours />} />
         <Route path="shop" element={<ShopSettings />} />
+        <Route path="team" element={<Team />} />
       </Route>
+      <Route path="/platform" element={<Platform />} />
       <Route path="/b/:token" element={<BookingPage />} />
       <Route path="/:slug" element={<ShopHome />} />
       <Route path="/:slug/book" element={<Book />} />

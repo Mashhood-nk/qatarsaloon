@@ -122,6 +122,7 @@ export function BookingPage() {
           {fmtDateLong(b.date)} · {fmtMin(b.start_min)}
         </Row>
         <Row label="Services">{serviceNames(b.services)}</Row>
+        {b.barber_name && <Row label="Barber">{b.barber_name}</Row>}
         <Row label="Duration">{fmtDuration(b.duration_min)}</Row>
         <Row label="Total">{money(b.price_total, b.shop.currency)} · pay at shop</Row>
         {b.shop.address && <Row label="Where">{b.shop.address}</Row>}

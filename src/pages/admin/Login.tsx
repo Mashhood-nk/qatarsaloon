@@ -17,8 +17,8 @@ export function Login() {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/auth/login", { username, password });
-      navigate("/admin", { replace: true });
+      const r = await api.post<{ role: string }>("/auth/login", { username, password });
+      navigate(r.role === "platform" ? "/platform" : "/admin", { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

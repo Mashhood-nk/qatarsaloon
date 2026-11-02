@@ -5,6 +5,7 @@ import { HttpError } from "./lib/util";
 import { publicRoutes } from "./routes/public";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
+import { platformRoutes } from "./routes/platform";
 
 const app = new Hono<AppEnv>();
 
@@ -16,6 +17,7 @@ app.use("/api/*", async (c, next) => {
 app.route("/api", publicRoutes);
 app.route("/api/auth", authRoutes);
 app.route("/api/admin", adminRoutes);
+app.route("/api/platform", platformRoutes);
 
 // Shop images from R2. Keys contain a random part, so they can be cached forever.
 app.get("/api/img/*", async (c) => {
