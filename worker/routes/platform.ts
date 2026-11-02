@@ -29,7 +29,7 @@ const STARTER_SERVICES: [string, number, number][] = [
 async function listShops(db: D1Database): Promise<PlatformShopDto[]> {
   const { results } = await db
     .prepare(
-      `SELECT s.id, s.slug, s.name, s.area, s.active, s.plan, s.plan_expires_at, s.notes, s.created_at,
+      `SELECT s.id, s.slug, s.name, s.area, s.active, s.listed, s.plan, s.plan_expires_at, s.notes, s.created_at,
          u.id AS owner_id, u.username AS owner_username, u.name AS owner_name,
          (SELECT COUNT(*) FROM barbers b WHERE b.shop_id = s.id AND b.active = 1) AS barbers,
          (SELECT COUNT(*) FROM bookings k WHERE k.shop_id = s.id AND k.created_at >= datetime('now', '-30 days')) AS bookings_30d,
@@ -45,6 +45,7 @@ async function listShops(db: D1Database): Promise<PlatformShopDto[]> {
     name: r.name,
     area: r.area,
     active: !!r.active,
+    listed: !!r.listed,
     plan: r.plan,
     plan_expires_at: r.plan_expires_at,
     notes: r.notes,
@@ -107,12 +108,13 @@ platformRoutes.put("/shops/:id", async (c) => {
   const expires = str(body.plan_expires_at, "Plan end date", 10, { required: false });
   if (expires && !isDateString(expires)) throw bad("Pick a valid plan end date");
   await db
-    .prepare("UPDATE shops SET name = ?, slug = ?, area = ?, active = ?, plan = ?, plan_expires_at = ?, notes = ? WHERE id = ?")
+    .prepare("UPDATE shops SET name = ?, slug = ?, area = ?, active = ?, listed = ?, plan = ?, plan_expires_at = ?, notes = ? WHERE id = ?")
     .bind(
       str(body.name, "Shop name", 80),
       slug,
       str(body.area, "Area", 60, { required: false }),
       bool(body.active) ? 1 : 0,
+      body.listed === undefined ? 1 : bool(body.listed) ? 1 : 0,
       str(body.plan, "Plan", 30, { required: false }) || "beta",
       expires || null,
       str(body.notes, "Notes", 1000, { required: false }),

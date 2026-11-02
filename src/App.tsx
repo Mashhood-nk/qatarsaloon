@@ -14,18 +14,7 @@ import { Hours } from "./pages/admin/Hours";
 import { ShopSettings } from "./pages/admin/ShopSettings";
 import { Team } from "./pages/admin/Team";
 import { Platform } from "./pages/platform/Platform";
-
-function Home() {
-  return (
-    <div className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-5 px-6">
-      <h1 className="display text-5xl leading-tight">Barber bookings</h1>
-      <p className="text-ink-soft">Online booking for barbershops. Customers book from a link; barbers confirm on WhatsApp.</p>
-      <Link to="/admin" className="btn-outline self-start">
-        Barber login
-      </Link>
-    </div>
-  );
-}
+import { Directory } from "./pages/Directory";
 
 function NotFound() {
   return (
@@ -41,7 +30,7 @@ function NotFound() {
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<Directory />} />
       <Route path="/admin/login" element={<Login />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Today />} />

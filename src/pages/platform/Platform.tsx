@@ -113,6 +113,7 @@ function PlatformHome({ me }: { me: MeDto }) {
                   <span className="flex flex-wrap items-center gap-2 text-base font-medium">
                     {s.name}
                     {!s.active && <Pill tone="bad">Paused</Pill>}
+                    {s.active && !s.listed && <Pill tone="amber">Hidden</Pill>}
                     <Pill tone="neutral">{s.plan}</Pill>
                   </span>
                   <a href={`/${s.slug}`} target="_blank" rel="noreferrer" className="truncate text-[13px] text-ink-soft underline">
@@ -254,6 +255,7 @@ function AddShop({ onCancel, onAdded }: { onCancel: () => void; onAdded: (list: 
 function EditShop({ s, onCancel, onSaved }: { s: PlatformShopDto; onCancel: () => void; onSaved: (list: PlatformShopDto[], msg: string) => void }) {
   const [f, setF] = useState({ name: s.name, slug: s.slug, area: s.area, plan: s.plan, plan_expires_at: s.plan_expires_at ?? "", notes: s.notes });
   const [active, setActive] = useState(s.active);
+  const [listed, setListed] = useState(s.listed);
   const [newPass, setNewPass] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -266,7 +268,7 @@ function EditShop({ s, onCancel, onSaved }: { s: PlatformShopDto; onCancel: () =
     setBusy(true);
     setError(null);
     try {
-      const list = await api.put<PlatformShopDto[]>(`/platform/shops/${s.id}`, { ...f, active });
+      const list = await api.put<PlatformShopDto[]>(`/platform/shops/${s.id}`, { ...f, active, listed });
       if (newPass) await api.post(`/platform/shops/${s.id}/owner-password`, { password: newPass });
       onSaved(list, newPass ? `Saved. New owner password set.` : "Saved");
     } catch (err) {
@@ -282,6 +284,7 @@ function EditShop({ s, onCancel, onSaved }: { s: PlatformShopDto; onCancel: () =
       <Field id={`s-slug-${s.id}`} label="Link" prefix="qatarsaloon.com/" value={f.slug} onChange={(v) => set("slug")(v.toLowerCase())} required />
       <Field id={`s-area-${s.id}`} label="Area" value={f.area} onChange={set("area")} />
       <Switch id={`s-active-${s.id}`} checked={active} onChange={setActive} label="Active" hint="Paused shops can't take bookings" />
+      <Switch id={`s-listed-${s.id}`} checked={listed} onChange={setListed} label="Show in directory" hint="Listed on qatarsaloon.com. Its own link works either way." />
       <div className="grid grid-cols-2 gap-2.5">
         <Field id={`s-plan-${s.id}`} label="Plan" value={f.plan} onChange={set("plan")} hint="e.g. beta, monthly" />
         <Field id={`s-exp-${s.id}`} label="Plan ends" type="date" value={f.plan_expires_at} onChange={set("plan_expires_at")} />

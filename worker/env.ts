@@ -32,6 +32,7 @@ export interface ShopRow {
   plan: string;
   plan_expires_at: string | null;
   notes: string;
+  listed: number;
   created_at: string;
 }
 

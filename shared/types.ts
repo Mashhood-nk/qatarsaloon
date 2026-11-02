@@ -233,8 +233,24 @@ export interface TeamMemberDto {
   upcoming: number;
 }
 
+/** A shop card in the public directory on the home page. */
+export interface DirectoryShopDto {
+  slug: string;
+  name: string;
+  area: string;
+  tagline: string;
+  accent: string;
+  cover_url: string | null;
+  logo_url: string | null;
+  barbers: number;
+  /** Cheapest active service, for "from 20 QAR". */
+  from_price: number | null;
+  currency: string;
+}
+
 export interface PlatformShopDto {
   id: number;
+  listed: boolean;
   slug: string;
   name: string;
   area: string;

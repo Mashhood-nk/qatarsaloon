@@ -4,7 +4,7 @@ import type { AppEnv, ShopRow } from "../env";
 import { computeSlots, conflictAt } from "../../shared/slots";
 import { addDays, isDateString, minutesUntil, nowInZone } from "../../shared/time";
 import { isE164 } from "../../shared/phone";
-import type { DayHoursDto, PublicBookingDto, PublicShopDto, SlotsDto } from "../../shared/types";
+import type { DayHoursDto, DirectoryShopDto, PublicBookingDto, PublicShopDto, SlotsDto } from "../../shared/types";
 import {
   activeBarbers,
   imageUrl,
@@ -63,6 +63,32 @@ function checkBookableDate(shop: ShopRow, date: string, today: string) {
   if (!isDateString(date)) throw bad("Pick a valid date");
   if (date < today || date > addDays(today, shop.booking_days_ahead)) throw bad("That date isn't open for booking");
 }
+
+/** Public directory: active shops the platform admin has listed. */
+publicRoutes.get("/shops", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.slug, s.name, s.area, s.tagline, s.accent, s.cover_key, s.logo_key, s.currency,
+       (SELECT COUNT(*) FROM barbers b WHERE b.shop_id = s.id AND b.active = 1) AS barbers,
+       (SELECT MIN(price) FROM services v WHERE v.shop_id = s.id AND v.active = 1 AND v.deleted = 0) AS from_price
+     FROM shops s WHERE s.active = 1 AND s.listed = 1 ORDER BY s.name`
+  ).all<any>();
+  const body: DirectoryShopDto[] = results
+    .filter((r) => r.barbers > 0)
+    .map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      area: r.area,
+      tagline: r.tagline,
+      accent: r.accent,
+      cover_url: imageUrl(r.cover_key),
+      logo_url: imageUrl(r.logo_key),
+      barbers: r.barbers,
+      from_price: r.from_price,
+      currency: r.currency,
+    }));
+  c.header("Cache-Control", "public, max-age=60");
+  return c.json(body);
+});
 
 publicRoutes.get("/shops/:slug", async (c) => {
   const db = c.env.DB;
