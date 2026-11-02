@@ -178,6 +178,20 @@ export function BookingDetail() {
           </button>
         )}
 
+        {b.status === "cancelled" && (
+          <div className="flex flex-col gap-3 rounded-2xl bg-bad-bg/60 p-4 text-[15px]">
+            <span>
+              {b.cancelled_by === "customer" ? `${b.customer?.name?.split(" ")[0] || "The customer"} cancelled this booking` : "You cancelled this booking"}
+              {b.cancelled_at ? ` on ${new Date(b.cancelled_at).toLocaleString("en-GB", { timeZone: shop.timezone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}. The slot is free again.
+            </span>
+            {b.cancelled_by === "customer" && !b.seen_at && (
+              <button type="button" className="btn-outline w-full" disabled={busy} onClick={() => act("seen")}>
+                OK, got it
+              </button>
+            )}
+          </div>
+        )}
+
         {b.status === "no_show" && (
           <>
             {to && (

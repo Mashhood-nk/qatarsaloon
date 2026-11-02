@@ -66,20 +66,33 @@ export function conflictAt(
 
 /**
  * Start times for a visit of durationMin.
+ * - Regular times every stepMin from opening (10:00, 10:30, ...).
+ * - Plus the exact moment the barber becomes free after each booking (end + buffer),
+ *   break or time off (rounded up to 5 min), so no time is wasted waiting for the next half hour.
  * - Times that fall in a break or time off, or don't fit before closing, are left out.
- * - Times taken by other bookings are returned with available = false (shown crossed out).
+ * - Regular times taken by other bookings are returned with available = false (shown crossed out).
  * - Times before earliestStart are left out.
  */
 export function computeSlots(input: DayInput, durationMin: number): Slot[] {
   const { hours, stepMin } = input;
   if (!hours || durationMin <= 0 || stepMin <= 0) return [];
-  const slots: Slot[] = [];
+  const byStart = new Map<number, Slot>();
   for (let start = hours.open; start + durationMin <= hours.close; start += stepMin) {
     const why = conflictAt(input, start, durationMin);
-    if (why === null) slots.push({ start, available: true });
-    else if (why === "booked") slots.push({ start, available: false });
+    if (why === null) byStart.set(start, { start, available: true });
+    else if (why === "booked") byStart.set(start, { start, available: false });
   }
-  return slots;
+  const freeFrom = [
+    ...input.bookings.map((b) => occupied(b, input.bufferMin).end),
+    ...input.breaks.map((b) => b.end),
+    ...input.timeOff.map((t) => t.end),
+  ].map((m) => Math.ceil(m / 5) * 5);
+  for (const start of freeFrom) {
+    if (start < hours.open || start + durationMin > hours.close) continue;
+    if (byStart.get(start)?.available) continue;
+    if (conflictAt(input, start, durationMin) === null) byStart.set(start, { start, available: true });
+  }
+  return [...byStart.values()].sort((a, b) => a.start - b.start);
 }
 
 /**

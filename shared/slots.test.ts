@@ -58,6 +58,28 @@ describe("computeSlots", () => {
     expect(at("10:00")?.available).toBe(true);
   });
 
+  it("offers the exact time right after a booking plus buffer", () => {
+    const input = day({ bookings: [{ start: h("11:00"), duration: 30 }] });
+    const s = starts(input, 30);
+    expect(s).toContain("11:35"); // 11:00 + 30 + 5 buffer
+    expect(s).not.toContain("11:30");
+    // only once, and in time order
+    expect(s.filter((x) => x === "11:35")).toHaveLength(1);
+    expect(s.indexOf("11:35")).toBe(s.indexOf("12:00") - 1);
+  });
+
+  it("doesn't add the after-booking time when the visit wouldn't fit", () => {
+    // 13:35 + 30 min runs into the 14:00 lunch break
+    const input = day({ bookings: [{ start: h("13:00"), duration: 30 }] });
+    expect(starts(input, 30)).not.toContain("13:35");
+    expect(starts(input, 20)).toContain("13:35");
+  });
+
+  it("offers the time right after time off ends, rounded to 5 minutes", () => {
+    const input = day({ timeOff: [{ start: h("17:00"), end: h("17:12") }] });
+    expect(starts(input, 30)).toContain("17:15");
+  });
+
   it("with zero buffer, back-to-back visits are allowed", () => {
     const input = day({ bufferMin: 0, bookings: [{ start: h("11:00"), duration: 30 }] });
     const s = starts(input, 30);

@@ -1,29 +1,47 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "barber-booking",
-  "main": "worker/index.ts",
-  "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
-  // The React app is served as static assets; /api/* goes to the Worker first.
-  "assets": {
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "barber-db",
-      // Replace with the id printed by: npx wrangler d1 create barber-db
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "IMAGES",
-      // Create with: npx wrangler r2 bucket create barber-images
-      "bucket_name": "barber-images"
-    }
-  ],
-  "observability": { "enabled": true }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "barber-booking",
+	"main": "worker/index.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// The React app is served as static assets; /api/* goes to the Worker first.
+	"assets": {
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "barber-db",
+			// Replace with the id printed by: npx wrangler d1 create barber-db
+			"database_id": 
+"c40abd55-a99c-4388-9bf4-567878e52ff4",
+			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "barber_db",
+			"database_name": "barber-db",
+			"database_id": "c40abd55-a99c-4388-9bf4-567878e52ff4",
+			"remote": true
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "IMAGES",
+			// Create with: npx wrangler r2 bucket create barber-images
+			"bucket_name": "barber-images"
+		},
+		{
+			"bucket_name": "barber-images",
+			"binding": "barber_images",
+			"remote": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
 }

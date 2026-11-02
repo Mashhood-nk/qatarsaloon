@@ -173,6 +173,9 @@ interface BookingJoinRow {
   reminder_sent_at: string | null;
   confirmed_at: string | null;
   created_at: string;
+  cancelled_by: "customer" | "shop" | null;
+  cancelled_at: string | null;
+  seen_at: string | null;
   c_id: number | null;
   c_phone: string | null;
   c_name: string | null;
@@ -188,6 +191,7 @@ interface BookingJoinRow {
 export const BOOKING_SELECT = `
   SELECT b.id, b.token, b.status, b.source, b.date, b.start_min, b.duration_min, b.price_total,
          b.started_at, b.finished_at, b.reminder_sent_at, b.confirmed_at, b.created_at,
+         b.cancelled_by, b.cancelled_at, b.seen_at,
          c.id AS c_id, c.phone AS c_phone, c.name AS c_name, c.whatsapp AS c_whatsapp, c.prefs AS c_prefs,
          c.notes AS c_notes, c.is_guest AS c_is_guest, c.created_at AS c_created_at,
          (SELECT COUNT(*) FROM bookings x WHERE x.customer_id = c.id AND x.status = 'done') AS c_visits,
@@ -256,6 +260,9 @@ export async function queryBookings(db: D1Database, where: string, params: unkno
     reminder_sent_at: r.reminder_sent_at,
     confirmed_at: r.confirmed_at,
     created_at: r.created_at,
+    cancelled_by: r.cancelled_by,
+    cancelled_at: r.cancelled_at,
+    seen_at: r.seen_at,
     services: services
       .filter((s) => s.booking_id === r.id)
       .map(({ service_id, name, duration_min, price }) => ({ service_id, name, duration_min, price })),

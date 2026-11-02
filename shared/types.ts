@@ -146,6 +146,9 @@ export interface AdminBookingDto {
   reminder_sent_at: string | null;
   confirmed_at: string | null;
   created_at: string;
+  cancelled_by: "customer" | "shop" | null;
+  cancelled_at: string | null;
+  seen_at: string | null;
   customer: (CustomerDto & { visits: number; no_shows: number }) | null;
 }
 
@@ -159,6 +162,8 @@ export interface TodayDto {
   time_off: TimeOffDto[];
   bookings: AdminBookingDto[];
   requests: AdminBookingDto[];
+  /** Customer cancellations the barber hasn't dismissed yet. */
+  cancellations: AdminBookingDto[];
 }
 
 export interface MeDto {

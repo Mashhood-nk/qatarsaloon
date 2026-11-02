@@ -234,6 +234,10 @@ publicRoutes.post("/bookings/:token/cancel", async (c) => {
   if (!canChange(shop, row)) {
     throw new HttpError(409, `This booking can't be cancelled online anymore. Please message ${shop.name} directly.`);
   }
-  await db.prepare("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE id = ?").bind(nowIso(), row.id).run();
+  const ts = nowIso();
+  await db
+    .prepare("UPDATE bookings SET status = 'cancelled', cancelled_by = 'customer', cancelled_at = ?1, seen_at = NULL, updated_at = ?1 WHERE id = ?2")
+    .bind(ts, row.id)
+    .run();
   return c.json({ ok: true });
 });

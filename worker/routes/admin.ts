@@ -36,13 +36,22 @@ adminRoutes.get("/today", async (c) => {
   const now = today(shop);
   const date = c.req.query("date") || now.date;
   if (!isDateString(date)) throw bad("Invalid date");
-  const [day, bookings, requests] = await Promise.all([
+  const [day, bookings, requests, cancellations] = await Promise.all([
     loadDay(db, shop, barberId, date),
-    queryBookings(db, "b.barber_id = ? AND b.date = ? AND b.status NOT IN ('declined','cancelled') ORDER BY b.start_min", [
-      barberId,
-      date,
-    ]),
+    // Customer cancellations stay in the schedule (crossed out) so the barber sees what changed.
+    queryBookings(
+      db,
+      `b.barber_id = ? AND b.date = ? AND (b.status NOT IN ('declined','cancelled')
+         OR (b.status = 'cancelled' AND b.cancelled_by = 'customer')) ORDER BY b.start_min`,
+      [barberId, date]
+    ),
     queryBookings(db, "b.barber_id = ? AND b.status = 'pending' AND b.date >= ? ORDER BY b.date, b.start_min", [barberId, now.date]),
+    queryBookings(
+      db,
+      `b.barber_id = ? AND b.status = 'cancelled' AND b.cancelled_by = 'customer' AND b.seen_at IS NULL
+         AND b.date >= ? ORDER BY b.cancelled_at DESC`,
+      [barberId, now.date]
+    ),
   ]);
   const body: TodayDto = {
     date,
@@ -54,6 +63,7 @@ adminRoutes.get("/today", async (c) => {
     time_off: day.timeOff,
     bookings,
     requests,
+    cancellations,
   };
   return c.json(body);
 });
@@ -90,6 +100,9 @@ adminRoutes.post("/bookings/:id/:action", async (c) => {
 
   if (action === "reminder") {
     await db.prepare("UPDATE bookings SET reminder_sent_at = ?, updated_at = ? WHERE id = ?").bind(ts, ts, id).run();
+  } else if (action === "seen") {
+    // Dismisses a cancellation alert.
+    await db.prepare("UPDATE bookings SET seen_at = ? WHERE id = ?").bind(ts, id).run();
   } else {
     const t = TRANSITIONS[action];
     if (!t) throw notFound("Unknown action");
@@ -109,7 +122,9 @@ adminRoutes.post("/bookings/:id/:action", async (c) => {
           ? ", started_at = ?1, confirmed_at = COALESCE(confirmed_at, ?1)"
           : action === "finish"
             ? ", finished_at = ?1"
-            : "";
+            : action === "cancel"
+              ? ", cancelled_by = 'shop', cancelled_at = ?1, seen_at = ?1"
+              : "";
     await db.prepare(`UPDATE bookings SET status = ?2, updated_at = ?1${extra} WHERE id = ?3`).bind(ts, to, id).run();
   }
   const [b] = await queryBookings(db, "b.id = ?", [id]);

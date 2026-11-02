@@ -63,6 +63,7 @@ export function Today() {
             ...d,
             bookings: d.bookings.some((x) => x.id === b.id) ? d.bookings.map((x) => (x.id === b.id ? b : x)) : d.bookings,
             requests: d.requests.filter((x) => x.id !== b.id || b.status === "pending"),
+            cancellations: d.cancellations.filter((x) => x.id !== b.id || !b.seen_at),
           }
         : d
     );
@@ -185,6 +186,32 @@ export function Today() {
         </div>
       )}
 
+      {data.cancellations.length > 0 && (
+        <section className="flex flex-col gap-2.5 px-5 pt-5" aria-live="polite">
+          <SectionTitle>Cancelled by customer</SectionTitle>
+          {data.cancellations.map((c) => (
+            <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-[#E8C4BD] bg-bad-bg/60 p-4">
+              <Icon name="ban" size={20} className="shrink-0 text-bad-ink" />
+              <Link to={`/admin/bookings/${c.id}`} className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-[15px] font-medium">{c.customer?.name || "Customer"} cancelled</span>
+                <span className="truncate text-[13px] text-ink-soft">
+                  {when(c.date, c.start_min)} · {serviceNames(c.services)}
+                </span>
+                <span className="text-xs text-muted">The slot is free again.</span>
+              </Link>
+              <button
+                type="button"
+                disabled={busyId === c.id}
+                onClick={() => act(c, "seen")}
+                className="h-11 shrink-0 rounded-full border border-ink px-4 text-sm disabled:opacity-50"
+              >
+                OK
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
       {data.requests.length > 0 && (
         <section className="flex flex-col gap-2.5 px-5 pt-5">
           <SectionTitle>New requests</SectionTitle>
@@ -265,7 +292,9 @@ function ScheduleRow({
   const startSoon = isToday && b.status === "confirmed" && b.start_min - now.min <= 30 && !anyRunning;
 
   let right: React.ReactNode = null;
-  if (b.status === "done") {
+  if (b.status === "cancelled") {
+    right = <Pill tone="bad">Cancelled</Pill>;
+  } else if (b.status === "done") {
     const a = actualMinutes(b);
     right = <Pill tone="ok">Done{a ? ` · ${a} min` : ""}</Pill>;
   } else if (b.status === "no_show") {
@@ -322,10 +351,10 @@ function ScheduleRow({
     <div className="flex min-h-[52px] items-center gap-3 border-b border-line py-3">
       <span className="w-[46px] shrink-0 text-sm text-muted">{fmtMin(b.start_min)}</span>
       <Link to={`/admin/bookings/${b.id}`} className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-[15px]">
+        <span className={`truncate text-[15px] ${b.status === "cancelled" ? "text-muted line-through" : ""}`}>
           {b.source === "walkin" ? `Walk-in · ${name}` : name}
         </span>
-        <span className="truncate text-xs text-muted">{serviceNames(b.services)}</span>
+        <span className={`truncate text-xs text-muted ${b.status === "cancelled" ? "line-through" : ""}`}>{serviceNames(b.services)}</span>
       </Link>
       {right}
     </div>
