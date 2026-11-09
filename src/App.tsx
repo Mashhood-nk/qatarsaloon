@@ -7,6 +7,7 @@ import { Login } from "./pages/admin/Login";
 import { Today } from "./pages/admin/Today";
 import { BookingDetail } from "./pages/admin/BookingDetail";
 import { WalkIn } from "./pages/admin/WalkIn";
+import { AddBooking } from "./pages/admin/AddBooking";
 import { Customers } from "./pages/admin/Customers";
 import { CustomerDetail } from "./pages/admin/CustomerDetail";
 import { Services } from "./pages/admin/Services";
@@ -35,6 +36,7 @@ export function App() {
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Today />} />
         <Route path="walkin" element={<WalkIn />} />
+        <Route path="new" element={<AddBooking />} />
         <Route path="bookings/:id" element={<BookingDetail />} />
         <Route path="customers" element={<Customers />} />
         <Route path="customers/:id" element={<CustomerDetail />} />

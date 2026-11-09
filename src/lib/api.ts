@@ -3,7 +3,9 @@
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    /** The full error body, for errors that carry extra details (e.g. a booking clash). */
+    public data: Record<string, unknown> | null = null
   ) {
     super(message);
   }
@@ -31,7 +33,7 @@ async function request<T>(method: string, path: string, body?: unknown, init: Re
   }
   if (!res.ok) {
     const msg = (data as { error?: string } | null)?.error ?? "Something went wrong. Please try again.";
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, (data as Record<string, unknown> | null) ?? null);
   }
   return data as T;
 }

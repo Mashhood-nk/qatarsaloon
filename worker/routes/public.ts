@@ -18,6 +18,7 @@ import {
   weeklyHours,
 } from "../lib/data";
 import { HttpError, bad, idList, int, notFound, randomToken, readJson, str, nowIso } from "../lib/util";
+import { notifyCancelled, notifyNewBooking } from "../lib/notify";
 
 export const publicRoutes = new Hono<AppEnv>();
 
@@ -226,7 +227,7 @@ publicRoutes.post("/shops/:slug/bookings", async (c) => {
 
   const customerId = await upsertCustomer(db, shop.id, phone, name, whatsappRaw || null);
   const token = randomToken(12);
-  await insertBooking(db, {
+  const bookingId = await insertBooking(db, {
     shopId: shop.id,
     barberId,
     customerId,
@@ -239,6 +240,7 @@ publicRoutes.post("/shops/:slug/bookings", async (c) => {
     token,
     services,
   });
+  c.executionCtx.waitUntil(notifyNewBooking(c.env, bookingId));
   return c.json({ token }, 201);
 });
 
@@ -322,5 +324,6 @@ publicRoutes.post("/bookings/:token/cancel", async (c) => {
     .prepare("UPDATE bookings SET status = 'cancelled', cancelled_by = 'customer', cancelled_at = ?1, seen_at = NULL, updated_at = ?1 WHERE id = ?2")
     .bind(ts, row.id)
     .run();
+  c.executionCtx.waitUntil(notifyCancelled(c.env, row.id));
   return c.json({ ok: true });
 });

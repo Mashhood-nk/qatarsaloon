@@ -1,11 +1,13 @@
 // Barber/owner API. Everything is scoped to the logged-in user's shop.
 import { Hono, type Context } from "hono";
 import type { AppEnv, ShopRow } from "../env";
-import { conflictAt, freeMinutesFrom } from "../../shared/slots";
+import { computeSlots, conflictAt, freeMinutesFrom } from "../../shared/slots";
 import { isDateString, nowInZone, addDays } from "../../shared/time";
 import { isE164 } from "../../shared/phone";
 import type { AdminShopDto, BarberDayDto, BookingStatus, TeamMemberDto, TodayDto } from "../../shared/types";
 import { hashPassword, requireOwner, requireShopUser } from "../lib/auth";
+import { notifyBarberOnly, notifyUser, vapidFromEnv } from "../lib/notify";
+import { isPushEndpoint } from "../lib/webpush";
 import {
   customerDto,
   imageUrl,
@@ -750,4 +752,159 @@ adminRoutes.post("/team/:id/login", requireOwner, async (c) => {
       .run();
   }
   return c.json(await teamList(c));
+});
+
+// ---------- Push notifications (each device subscribes for its logged-in user) ----------
+
+adminRoutes.get("/push/key", (c) => {
+  const vapid = vapidFromEnv(c.env);
+  if (!vapid) throw new HttpError(409, "Notifications aren't set up on the server yet");
+  return c.json({ public_key: vapid.publicKey });
+});
+
+adminRoutes.post("/push/subscribe", async (c) => {
+  const user = c.get("user");
+  if (user.role === "platform") throw bad("Turn on notifications from the shop's own login");
+  const body = await readJson(c.req.raw);
+  const endpoint = str(body.endpoint, "Endpoint", 1000);
+  const keys = (body.keys ?? {}) as Record<string, unknown>;
+  const p256dh = str(keys.p256dh, "Key", 200);
+  const auth = str(keys.auth, "Key", 100);
+  if (!isPushEndpoint(endpoint)) throw bad("This browser's push service isn't supported");
+  const ua = (c.req.header("user-agent") ?? "").slice(0, 200);
+  await c.env.DB.prepare(
+    `INSERT INTO push_subscriptions (user_id, shop_id, endpoint, p256dh, auth, user_agent) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, shop_id = excluded.shop_id,
+       p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent`
+  )
+    .bind(user.id, c.get("shop").id, endpoint, p256dh, auth, ua)
+    .run();
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/push/unsubscribe", async (c) => {
+  const body = await readJson(c.req.raw);
+  await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+    .bind(str(body.endpoint, "Endpoint", 1000), c.get("user").id)
+    .run();
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/push/test", async (c) => {
+  const n = await notifyUser(c.env, c.get("user").id, {
+    title: "Notifications are on",
+    body: `You'll get new bookings, cancellations and reminder nudges for ${c.get("shop").name} here.`,
+    url: "/admin",
+    tag: "test",
+  });
+  if (n === 0) throw bad("This device isn't subscribed yet. Turn notifications on first.");
+  return c.json({ ok: true, devices: n });
+});
+
+// ---------- Bookings added by the barber (phone bookings) ----------
+
+/** Free and taken start times for one barber, as the barber sees them (no online-booking notice rules). */
+adminRoutes.get("/slots", async (c) => {
+  const db = c.env.DB;
+  const shop = c.get("shop");
+  const date = c.req.query("date") ?? "";
+  if (!isDateString(date)) throw bad("Pick a valid date");
+  const barberId = pickBarber(c, c.req.query("barber"));
+  const { duration } = await pickServices(db, shop.id, idList(c.req.query("services"), "service"));
+  const now = today(shop);
+  const day = await loadDay(db, shop, barberId, date, { nowMin: date === now.date ? now.min : undefined });
+  if (date === now.date) day.input.earliestStart = now.min;
+  return c.json({
+    date,
+    closed: !day.hours,
+    duration_min: duration,
+    slots: computeSlots(day.input, duration),
+    hours: day.hours ? { open_min: day.hours.open, close_min: day.hours.close } : null,
+    breaks: [...day.breaks, ...day.timeOff.map((t) => ({ start_min: t.start_min, end_min: t.end_min, label: t.reason || "Time off" }))],
+  });
+});
+
+/** Finds a customer by exact mobile number (to fill in name and show notes). */
+adminRoutes.get("/customers-lookup", async (c) => {
+  const phone = c.req.query("phone") ?? "";
+  if (!isE164(phone)) return c.json(null);
+  const row = await c.env.DB.prepare(
+    `SELECT c.*, (SELECT COUNT(*) FROM bookings b WHERE b.customer_id = c.id AND b.status = 'done') AS visits
+     FROM customers c WHERE c.shop_id = ? AND c.phone = ?`
+  )
+    .bind(c.get("shop").id, phone)
+    .first<any>();
+  return c.json(row ? { ...customerDto(row), visits: row.visits } : null);
+});
+
+const CLASH_TEXT: Record<string, (who: string, buffer: number) => string> = {
+  closed: (who) => `${who} isn't working on this day.`,
+  outside_hours: (who) => `This is outside ${who}'s working hours.`,
+  break: () => "This overlaps a break.",
+  time_off: (who) => `${who} has time off then.`,
+  booked: (_who, buffer) => `This overlaps another booking${buffer ? ` (including the ${buffer}-minute buffer)` : ""}.`,
+  past: () => "This time has already passed today.",
+};
+
+/**
+ * Adds a confirmed booking (e.g. agreed on the phone). If the time clashes, returns 409 with
+ * `clash` so the app can warn; sending `force: true` books anyway.
+ */
+adminRoutes.post("/bookings", async (c) => {
+  const db = c.env.DB;
+  const shop = c.get("shop");
+  const body = await readJson(c.req.raw);
+  const barberId = pickBarber(c, body.barber_id);
+  const now = today(shop);
+  const date = str(body.date, "Date", 10);
+  if (!isDateString(date)) throw bad("Pick a valid date");
+  if (date < now.date) throw bad("That date has passed");
+  if (date > addDays(now.date, 365)) throw bad("That date is too far ahead");
+  const startMin = int(body.start_min, "Time", 0, 1439);
+  const { services, duration, price } = await pickServices(db, shop.id, idList(body.service_ids, "service"));
+  if (startMin + duration > 1440) throw bad("The visit would run past midnight");
+  const phone = str(body.phone, "Mobile number", 20, { required: false });
+  if (phone && !isE164(phone)) throw bad("Check the mobile number");
+  const whatsapp = str(body.whatsapp, "WhatsApp number", 20, { required: false });
+  if (whatsapp && !isE164(whatsapp)) throw bad("Check the WhatsApp number");
+  const name = str(body.name, "Name", 60, { required: false });
+  if (!phone && !name) throw bad("Add the customer's mobile number or at least a name");
+
+  if (!bool(body.force)) {
+    const day = await loadDay(db, shop, barberId, date, { nowMin: date === now.date ? now.min : undefined });
+    const why = date === now.date && startMin < now.min ? "past" : conflictAt(day.input, startMin, duration);
+    if (why) {
+      const who = barberName(c, barberId) || "The barber";
+      return c.json({ error: CLASH_TEXT[why]?.(who, shop.buffer_min) ?? "This time isn't free.", clash: why }, 409);
+    }
+  }
+
+  let customerId: number;
+  if (phone) {
+    customerId = await upsertCustomer(db, shop.id, phone, name, whatsapp || null);
+  } else {
+    const row = await db
+      .prepare("INSERT INTO customers (shop_id, phone, name, is_guest) VALUES (?, NULL, ?, 1) RETURNING id")
+      .bind(shop.id, name)
+      .first<{ id: number }>();
+    customerId = row!.id;
+  }
+  const id = await insertBooking(db, {
+    shopId: shop.id,
+    barberId,
+    customerId,
+    date,
+    startMin,
+    duration,
+    price,
+    status: "confirmed",
+    source: "admin",
+    token: randomToken(12),
+    confirmedAt: nowIso(),
+    services,
+  });
+  // If the owner booked it for another barber, let that barber know.
+  if (barberId !== c.get("ownBarberId")) c.executionCtx.waitUntil(notifyBarberOnly(c.env, shop.id, barberId, id));
+  const [b] = await queryBookings(db, "b.id = ?", [id]);
+  return c.json(b, 201);
 });

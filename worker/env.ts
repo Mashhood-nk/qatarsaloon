@@ -2,6 +2,11 @@ export interface Env {
   DB: D1Database;
   IMAGES: R2Bucket;
   ASSETS: Fetcher;
+  /** Web Push keys (set once with: npm run setup-push). */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** Contact for push services; defaults to https://qatarsaloon.com */
+  VAPID_SUBJECT?: string;
 }
 
 export interface ShopRow {

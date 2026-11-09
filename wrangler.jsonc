@@ -28,5 +28,7 @@
       "bucket_name": "barber-images"
     }
   ],
+  // Every 5 minutes: "send a reminder" notifications and cleanup.
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true }
 }

@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
+    "lib": [
+      "ES2023"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -9,7 +11,15 @@
     "noUnusedParameters": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "types": ["@cloudflare/workers-types"]
+    "types": [
+      "@cloudflare/workers-types"
+    ]
   },
-  "include": ["worker", "shared"]
+  "include": [
+    "worker",
+    "shared"
+  ],
+  "exclude": [
+    "**/*.test.ts"
+  ]
 }

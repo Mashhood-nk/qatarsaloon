@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { api, errorMessage } from "../../lib/api";
 import { useData } from "../../lib/useData";
@@ -11,6 +11,45 @@ import { customerWhatsApp, messages, openWhatsApp } from "../../lib/messages";
 import { ErrorNote, Pill, SectionTitle, Spinner, Toast } from "../../components/ui";
 import { Icon } from "../../components/Icon";
 import { BarberChips, useAdmin } from "./AdminLayout";
+import { pushStatus, type PushStatus } from "../../lib/push";
+
+const PROMPT_KEY = "bb:push-prompt-dismissed";
+
+/** A small nudge on Today until this device has notifications on. */
+function PushPrompt() {
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(PROMPT_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    pushStatus().then(setStatus).catch(() => setStatus("unsupported"));
+  }, []);
+  if (dismissed || !status || status === "on" || status === "unsupported") return null;
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(PROMPT_KEY, "1");
+    } catch {
+      /* fine */
+    }
+  };
+  return (
+    <div className="mx-5 mt-2 flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5">
+      <Icon name="info" className="shrink-0 text-muted" />
+      <Link to="/admin/shop" className="flex-1 text-sm leading-snug">
+        {status === "ios-install" ? "Add this app to your home screen to get booking alerts." : "Turn on notifications to hear about new bookings."}{" "}
+        <span className="text-[var(--accent)] underline">Set up</span>
+      </Link>
+      <button type="button" aria-label="Dismiss" onClick={dismiss} className="flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-sand">
+        <Icon name="close" size={16} />
+      </button>
+    </div>
+  );
+}
 
 const FILTER_KEY = "bb:today-barber";
 
@@ -28,7 +67,7 @@ type Row =
   | { kind: "break"; at: number; end: number; label: string };
 
 export function Today() {
-  const { shop, shopInfo, isOwner, barbers, defaultBarberId } = useAdmin();
+  const { shop, shopInfo, isOwner, barbers, defaultBarberId, me } = useAdmin();
   useDocumentTitle("Today");
   const [offset, setOffset] = useState(0);
   // Owners can look at everyone or one barber; barbers always see their own day.
@@ -177,6 +216,7 @@ export function Today() {
         )}
       </header>
 
+      {isToday && !me.acting && <PushPrompt />}
       {isOwner && <BarberChips value={filter} onChange={setFilter} allowAll label="Show schedule for" />}
 
       {delays.map((delay) => (
@@ -222,10 +262,10 @@ export function Today() {
         </div>
       </div>
 
-      {isToday && (
+      {(
         <div className="px-5 pt-2.5">
-          <Link to="/admin/walkin" className="flex h-[50px] items-center justify-center gap-2 rounded-full border border-dashed border-[#8C8273] text-[15px]">
-            <Icon name="plus" size={18} /> Add walk-in
+          <Link to="/admin/new" className="flex h-[50px] items-center justify-center gap-2 rounded-full border border-dashed border-[#8C8273] text-[15px]">
+            <Icon name="plus" size={18} /> Add booking
           </Link>
         </div>
       )}

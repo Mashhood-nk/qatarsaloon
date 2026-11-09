@@ -13,7 +13,8 @@
     "db:seed:local": "wrangler d1 execute barber-db --local --file=seed/seed.sql",
     "db:seed:remote": "wrangler d1 execute barber-db --remote --file=seed/seed.sql",
     "hash-password": "node scripts/hash-password.mjs",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "setup-push": "node scripts/setup-push.mjs"
   },
   "dependencies": {
     "hono": "^4.13.14",

@@ -6,6 +6,7 @@ import { publicRoutes } from "./routes/public";
 import { adminRoutes } from "./routes/admin";
 import { authRoutes } from "./routes/auth";
 import { platformRoutes } from "./routes/platform";
+import { cleanup, sendReminderNudges } from "./lib/notify";
 
 const app = new Hono<AppEnv>();
 
@@ -40,4 +41,19 @@ app.onError((err, c) => {
   return c.json({ error: "Something went wrong. Please try again." }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Runs every 5 minutes (see "triggers" in wrangler.jsonc): reminder nudges and housekeeping.
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(
+      (async () => {
+        try {
+          await sendReminderNudges(env);
+          await cleanup(env);
+        } catch (e) {
+          console.error("scheduled job failed", e);
+        }
+      })()
+    );
+  },
+} satisfies ExportedHandler<AppEnv["Bindings"]>;

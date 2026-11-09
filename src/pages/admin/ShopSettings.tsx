@@ -8,6 +8,7 @@ import type { AdminShopDto } from "../../../shared/types";
 import { splitE164, toE164 } from "../../../shared/phone";
 import { ErrorNote, SectionTitle, Spinner, Toast } from "../../components/ui";
 import { Icon } from "../../components/Icon";
+import { PushCard } from "../../components/PushCard";
 import { PhoneField, type PhoneValue } from "../../components/PhoneField";
 import { useAdmin } from "./AdminLayout";
 
@@ -43,6 +44,9 @@ function Account() {
           {me.user.name} · {shop.name}
         </span>
       </header>
+      <section className="px-5 pt-4">
+        <PushCard onMessage={setToast} />
+      </section>
       <Password onDone={() => setToast("Password changed")} />
       <section className="px-5 pt-6 pb-8">
         <button type="button" className="btn-outline w-full" onClick={() => logoutAndLeave(navigate)}>
@@ -107,6 +111,12 @@ function OwnerShop() {
           </div>
         </div>
       </section>
+
+      {!me.acting && (
+        <section className="px-5 pt-5">
+          <PushCard onMessage={setToast} />
+        </section>
+      )}
 
       <section className="px-5 pt-5">
         <Link to="/admin/team" className="card flex items-center gap-3.5 p-4">
